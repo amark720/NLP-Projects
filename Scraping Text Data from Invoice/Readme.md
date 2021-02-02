@@ -1,4 +1,4 @@
-# Scraping Text data form Incoice.
+# Scraping Text data form Invoice.
 ![Python 3.6](https://img.shields.io/badge/Python-3.6-brightgreen.svg) ![NLTK](https://img.shields.io/badge/Library-NLTK-orange.svg) ![PIL](https://img.shields.io/badge/PIL-1.1.7-blueviolet) ![pytesseract](https://img.shields.io/badge/pytesseract-0.3.4-yellow)
 
 Here I've used Python+pytesseract+PIL+Text Processing techniques for scraping text written into an Invoice image. After scraping the raw text, I've performed text pre processing and stored each column values of Invoice into a Dictionary form in a format of Key Value Pairs.
