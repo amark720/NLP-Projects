@@ -9,7 +9,7 @@
 
 <img src="https://github.com/amark720/Amar-kumar/blob/master/ScreenShots/NLP_Banner.png" alt="Landing Page" height="50%" width="70%" />
 
-### Don't forget to ⭐ the repository, if it helped you in anyway.<br>
+### Don't forget to ⭐ the repository, if it helped you in anyway.<br><br>
 
 [![GitHub](https://img.shields.io/github/followers/amark720?style=social)](https://github.com/amark720)
 #### Feel Free to contact me at➛ databoyamar@gmail.com for any help related to Projects in this Repository!
