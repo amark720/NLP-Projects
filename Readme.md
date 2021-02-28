@@ -9,7 +9,7 @@
 
 <img src="https://github.com/amark720/Amar-kumar/blob/master/ScreenShots/NLP_Banner.png" alt="Landing Page" height="50%" width="70%" />
 
-### Don't forget to ⭐ the repository, if it helped you in anyway.<br><br>
+### Don't forget to ⭐ the repository, if it helped you in anyway.<br>
 
 ### Repo Stats:
 [![GitHub](https://img.shields.io/github/followers/amark720?style=social)](https://github.com/amark720)  &emsp;  [![GitHub](https://img.shields.io/github/stars/amark720/NLP-Projects?style=social)](https://github.com/amark720/NLP-Projects)  &emsp;  [![GitHub](https://img.shields.io/github/forks/amark720/NLP-Projects?style=social)](https://github.com/amark720/NLP-Projects)
