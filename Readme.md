@@ -11,5 +11,6 @@
 
 ### Don't forget to ⭐ the repository, if it helped you in anyway.<br><br>
 
-[![GitHub](https://img.shields.io/github/followers/amark720?style=social)](https://github.com/amark720) [![GitHub](https://img.shields.io/github/stars/amark720/NLP-Projects?style=social)](https://github.com/amark720/NLP-Projects) [![GitHub](https://img.shields.io/github/forks/amark720/NLP-Projects?style=social)](https://github.com/amark720/NLP-Projects)
+#### Repo Stats:
+[![GitHub](https://img.shields.io/github/followers/amark720?style=social)](https://github.com/amark720)    [![GitHub](https://img.shields.io/github/stars/amark720/NLP-Projects?style=social)](https://github.com/amark720/NLP-Projects)    [![GitHub](https://img.shields.io/github/forks/amark720/NLP-Projects?style=social)](https://github.com/amark720/NLP-Projects)
 #### Feel Free to contact me at➛ databoyamar@gmail.com for any help related to Projects in this Repository!
