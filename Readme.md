@@ -13,4 +13,3 @@
 
 [![GitHub](https://img.shields.io/github/followers/amark720?style=social)](https://github.com/amark720)
 #### Feel Free to contact me at➛ databoyamar@gmail.com for any help related to Projects in this Repository!
-
