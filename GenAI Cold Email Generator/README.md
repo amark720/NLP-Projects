@@ -21,7 +21,7 @@ Cold Email Generator is an AI-powered Email Generator designed to streamline the
 
 
 ### ScreenRecording of Live App:
-[![Demo Doccou alpha](https://github.com/amark720/Computer-Vision-and-OpenCV-Projects/blob/main/Scraping%20Text%20Data%20from%20Image/InvoiceToText%20Recording.gif)](https://github.com/amark720/Computer-Vision-and-OpenCV-Projects/blob/main/Scraping%20Text%20Data%20from%20Image/InvoiceToText%20Recording.gif)
+<img src="https://github.com/amark720/NLP-Projects/blob/main/GenAI%20Cold%20Email%20Generator/ScreenRecording.gif" width=100% height=90% >
 
 ### Features:
 
