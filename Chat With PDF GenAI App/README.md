@@ -1,6 +1,6 @@
 # Chat With PDF - Generative AI App 📄🤖  
 
-Welcome to the **Chat With PDF GenAI App** folder, a part of my **NLP Projects** repository! This folder serves as a quick introduction to this exciting project, which combines the power of Generative AI, Amazon Bedrock, Langchain, and vector databases to enable interactive conversations with PDFs. To explore the project in detail, including all files, architecture, and implementation, please visit the [**Original Repository**](https://github.com/amark720/Chat_With_PDF_App).  
+Welcome to the **Chat With PDF GenAI App** folder, a part of my **NLP Projects** repository! This folder provides a brief overview of the project, which combines the power of Generative AI, Amazon Bedrock, Langchain, and vector databases to enable interactive conversations with PDFs. To explore the project in detail, including all files, architecture, and implementation, please visit the [**Original Repository**](https://github.com/amark720/Chat_With_PDF_App).  
 
 #### 📂 **View Full Chat With PDF Project:**  <a href="https://github.com/amark720/Chat_With_PDF_App" target="_blank"><img align="center" src="https://github.com/amark720/Amar-kumar/blob/master/ScreenShots/Click-Here-btn.gif" width="150" height="35" ></a>  
 
