@@ -19,7 +19,7 @@ Password - 670k unique values for password collected online. Strength - three va
 
 #### Accuracy-
 
-<a href="https://www.kaggle.com/datawarriors/password-strength-classifier-using-nlp-tf-idf" target="_blank"><img src="https://github.com/amark720/Data-Science-Projects/blob/master/NLP%20Projects/Password%20Strength%20Classifier%20Using%20TF-IDF/Screenshot.PNG" width=80% height=40% > </a>
+<a href="https://www.kaggle.com/datawarriors/password-strength-classifier-using-nlp-tf-idf" target="_blank"><img src="https://github.com/amark720/NLP-Projects/blob/main/Password%20Strength%20Classifier%20Using%20TF-IDF/Screenshot.PNG" width=80% height=40% > </a>
 
 
-#### Feel Free to contact me at➛ amark720@gmail.com for any help related to this Project!
+#### 📧 Feel Free to contact me at➛ **amark720@gmail.com** for any assistance or questions related to this project!
