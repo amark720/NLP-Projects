@@ -59,4 +59,7 @@ Python, LangChain, llama-3.1-70b-versatile (Open-source model), Groq Cloud, Stre
 
 #### 📧 Feel Free to contact me at➛ amark720@gmail.com for any help related to this Project!
 
-<!-- Reference- https://www.youtube.com/watch?v=CO4E_9V6li0&ab_channel=codebasics -->
+<!-- 
+Notes: We didn't used Ollama coz the inference of response was slow, so we used GroqCloud whose inference was fast coz it uses LPU(Language processing unit).
+2. We used ChromaDb over traditional DB coz it does meaning based Sementic search so it gives results similar to user's query based on eucledian distance.(12:00)  
+Reference- https://www.youtube.com/watch?v=CO4E_9V6li0&ab_channel=codebasics -->
