@@ -183,6 +183,53 @@ def ensure_cuda_dll_available() -> None:
         )
 
 
+def add_nvidia_pip_dll_directories() -> list[Path]:
+    """Expose CUDA DLLs shipped by the official NVIDIA pip wheels.
+
+    faster-whisper/CTranslate2 need cuBLAS and cuDNN (plus their own dependencies like
+    cublasLt and cudart) at runtime. The most reliable way to get a *complete and
+    matching* set of these DLLs on Windows is via the NVIDIA pip wheels
+    (e.g. nvidia-cublas-cuXX, nvidia-cudnn-cuXX), which drop everything together under
+    site-packages/nvidia/<lib>/bin. Windows does not search those folders automatically,
+    so we register each of them here. Returns the directories that were added.
+    """
+    added: list[Path] = []
+    if not hasattr(os, "add_dll_directory"):
+        return added
+
+    search_roots: list[Path] = []
+    try:
+        import site
+
+        for entry in site.getsitepackages():
+            search_roots.append(Path(entry))
+        user_site = site.getusersitepackages()
+        if user_site:
+            search_roots.append(Path(user_site))
+    except Exception:
+        pass
+
+    # Fallback: derive site-packages from this interpreter's own location.
+    search_roots.append(Path(sys.prefix) / "Lib" / "site-packages")
+
+    seen: set[Path] = set()
+    for root in search_roots:
+        nvidia_dir = root / "nvidia"
+        if not nvidia_dir.exists():
+            continue
+        for bin_dir in nvidia_dir.glob("*/bin"):
+            resolved = bin_dir.resolve()
+            if resolved in seen or not resolved.exists():
+                continue
+            seen.add(resolved)
+            try:
+                os.add_dll_directory(str(resolved))
+                added.append(resolved)
+            except OSError:
+                pass
+    return added
+
+
 def add_cuda_dll_directories() -> None:
     """Expose the project folder and common CUDA bin folders to Windows DLL resolution."""
     if not hasattr(os, "add_dll_directory"):
@@ -193,6 +240,13 @@ def add_cuda_dll_directories() -> None:
         os.add_dll_directory(str(project_dir))
     except OSError:
         pass
+
+    # DLLs installed via NVIDIA pip wheels (most reliable on Windows) take priority.
+    nvidia_dirs = add_nvidia_pip_dll_directories()
+    if nvidia_dirs:
+        print("Using CUDA libraries from NVIDIA pip wheels:")
+        for bin_dir in nvidia_dirs:
+            print(f"  - {bin_dir}")
 
     candidates: list[Path] = []
     for env_name in (
@@ -475,3 +529,4 @@ if __name__ == "__main__":
 #   - [2026-06-26] technical-writer: Added --task option (transcribe/translate) to support English output for Hindi/mixed-language audio
 #   - [2026-07-27] technical-writer: Added optional GPU (--device auto/cpu/cuda) with automatic CPU fallback, and folder input to batch-transcribe all media files (with --recursive)
 #   - [2026-07-27] technical-writer: Added user-friendly progress tracking - per-file X-of-N counter and a live percentage + progress bar based on media duration
+#   - [2026-07-27] technical-writer: Register CUDA DLLs shipped by NVIDIA pip wheels (site-packages/nvidia/*/bin) so GPU runs find a complete, matching cuBLAS/cuDNN set on Windows
