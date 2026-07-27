@@ -91,7 +91,7 @@ After it finishes, activate the virtual environment in any new terminal:
 
 ```powershell
 # Windows
-.\.venv\Scripts\Activate.ps1
+.venv\Scripts\Activate.ps1
 ```
 
 ```bash

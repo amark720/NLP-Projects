@@ -1,4 +1,4 @@
-"""
+'''
 Transcribe a video/audio file (or a whole folder of them) to text transcripts
 and SRT subtitle files using faster-whisper (local, offline speech recognition).
 
@@ -8,6 +8,7 @@ Usage:
 
     # Transcribe EVERY video/audio inside a folder, one by one:
     python transcribe.py "C:\\path\\to\\recordings_folder"
+    python transcribe.py "C:\\Users\\amark\\Videos\\Interview Recordings\\More Videos" --model large-v3 --device cuda --language en
     python transcribe.py "C:\\path\\to\\recordings_folder" --recursive
 
     # FAST but less accurate (small/tiny model):
@@ -51,7 +52,7 @@ Model choice (speed vs accuracy):
 Outputs (next to each input file):
     <name>.txt   -> plain transcript with timestamps
     <name>.srt   -> subtitle file usable in any video player
-"""
+'''
 
 import argparse
 import os
