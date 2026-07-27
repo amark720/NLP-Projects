@@ -25,11 +25,32 @@ def fuse_linear(spec, layers):
     if bias_dtype is not None:
         spec.bias = concatenate(
             [
-                layer.bias
-                if layer.has_bias()
-                else zeros([layer.weight.shape[0]], dtype=bias_dtype)
+                (
+                    layer.bias
+                    if layer.has_bias()
+                    else zeros([layer.weight.shape[0]], dtype=bias_dtype)
+                )
                 for layer in layers
             ]
+        )
+
+
+def fuse_linear_prequant(spec, layers, axis):
+    if not layers:
+        raise ValueError("Cannot fuse linear layers: at least one layer is required")
+    params = ["weight", "weight_scale", "weight_zero"]
+    if isinstance(layers[0].weight, np.ndarray):
+        concatenate = np.concatenate
+    else:
+        import torch
+
+        concatenate = torch.cat
+
+    for param in params:
+        setattr(
+            spec,
+            param,
+            concatenate([getattr(layer, param) for layer in layers], axis=axis),
         )
 
 
