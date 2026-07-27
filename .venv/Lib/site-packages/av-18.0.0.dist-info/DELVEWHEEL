@@ -1,0 +1,2 @@
+Version: 1.13.0
+Arguments: ['C:\\Users\\runneradmin\\AppData\\Local\\Temp\\cibw-run-kk7gxan4\\cp311-win_amd64\\build\\venv\\Scripts\\delvewheel', 'repair', '--add-path', 'C:\\cibw\\vendor\\bin', '-w', 'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\cibw-run-kk7gxan4\\cp311-win_amd64\\repaired_wheel', 'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\cibw-run-kk7gxan4\\cp311-win_amd64\\built_wheel\\av-18.0.0-cp311-abi3-win_amd64.whl']

@@ -54,6 +54,8 @@ Outputs (next to each input file):
 """
 
 import argparse
+import os
+import shutil
 import sys
 from pathlib import Path
 
@@ -105,6 +107,167 @@ def resolve_device_and_compute(requested_device: str, requested_compute: str | N
     return device, compute_type
 
 
+def _looks_like_cuda_runtime_error(exc: Exception) -> bool:
+    """Return True when the error likely comes from missing CUDA runtime libraries."""
+    message = str(exc).lower()
+    return (
+        "cublas" in message
+        or "cudnn" in message
+        or "cudart" in message
+        or "cuda" in message and any(token in message for token in ("not found", "cannot be loaded", "failed to load", "failed to initialize"))
+        or ("dll" in message and "not found" in message)
+    )
+
+
+def ensure_cuda_dll_available() -> None:
+    """Make the expected CUDA runtime DLL discoverable by copying it locally if needed."""
+    dll_name = "cublas64_11.dll"
+    project_dir = Path(__file__).resolve().parent
+    local_dll_path = project_dir / dll_name
+
+    if local_dll_path.exists():
+        return
+
+    candidates: list[Path] = []
+    for env_name in (
+        "CUDA_PATH",
+        "CUDA_PATH_V12_7",
+        "CUDA_PATH_V12_6",
+        "CUDA_PATH_V12_5",
+        "CUDA_PATH_V12_4",
+        "CUDA_PATH_V12_3",
+        "CUDA_PATH_V12_2",
+        "CUDA_PATH_V12_1",
+        "CUDA_PATH_V12_0",
+        "CUDA_PATH_V11_8",
+        "CUDA_PATH_V11_7",
+        "CUDA_PATH_V11_6",
+        "CUDA_PATH_V11_5",
+        "CUDA_PATH_V11_4",
+        "CUDA_PATH_V11_3",
+        "CUDA_PATH_V11_2",
+        "CUDA_PATH_V11_1",
+        "CUDA_PATH_V11_0",
+    ):
+        if env_name in os.environ:
+            path = Path(os.environ[env_name])
+            if path.exists():
+                candidates.append(path / "bin")
+
+    custom_locations = [
+        Path(r"C:\CUDA\v12.7\bin"),
+        Path(r"C:\CUDA\v12.6\bin"),
+        Path(r"C:\CUDA\v12.5\bin"),
+        Path(r"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.7\bin"),
+        Path(r"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.6\bin"),
+        Path(r"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.5\bin"),
+    ]
+    for path in custom_locations:
+        if path.exists():
+            candidates.append(path)
+
+    for bin_dir in candidates:
+        dll_path = bin_dir / dll_name
+        if dll_path.exists():
+            try:
+                shutil.copy2(dll_path, local_dll_path)
+                print(f"Copied {dll_name} to {local_dll_path}")
+            except Exception:
+                pass
+            break
+
+    if not local_dll_path.exists():
+        print(
+            f"WARNING: could not find {dll_name} in common CUDA locations. Continuing without a local copy.",
+            file=sys.stderr,
+        )
+
+
+def add_cuda_dll_directories() -> None:
+    """Expose the project folder and common CUDA bin folders to Windows DLL resolution."""
+    if not hasattr(os, "add_dll_directory"):
+        return
+
+    project_dir = Path(__file__).resolve().parent
+    try:
+        os.add_dll_directory(str(project_dir))
+    except OSError:
+        pass
+
+    candidates: list[Path] = []
+    for env_name in (
+        "CUDA_PATH",
+        "CUDA_PATH_V12_7",
+        "CUDA_PATH_V12_6",
+        "CUDA_PATH_V12_5",
+        "CUDA_PATH_V12_4",
+        "CUDA_PATH_V12_3",
+        "CUDA_PATH_V12_2",
+        "CUDA_PATH_V12_1",
+        "CUDA_PATH_V12_0",
+        "CUDA_PATH_V11_8",
+        "CUDA_PATH_V11_7",
+        "CUDA_PATH_V11_6",
+        "CUDA_PATH_V11_5",
+        "CUDA_PATH_V11_4",
+        "CUDA_PATH_V11_3",
+        "CUDA_PATH_V11_2",
+        "CUDA_PATH_V11_1",
+        "CUDA_PATH_V11_0",
+    ):
+        if env_name in os.environ:
+            path = Path(os.environ[env_name])
+            if path.exists():
+                candidates.append(path / "bin")
+
+    custom_locations = [
+        Path(r"C:\CUDA\v12.7\bin"),
+        Path(r"C:\CUDA\v12.6\bin"),
+        Path(r"C:\CUDA\v12.5\bin"),
+        Path(r"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.7\bin"),
+        Path(r"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.6\bin"),
+        Path(r"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.5\bin"),
+    ]
+    for path in custom_locations:
+        if path.exists():
+            candidates.append(path)
+
+    for bin_dir in candidates:
+        if not bin_dir.exists():
+            continue
+        try:
+            os.add_dll_directory(str(bin_dir))
+        except OSError:
+            pass
+
+
+def load_whisper_model(model_name: str, requested_device: str, requested_compute: str | None):
+    """Create a WhisperModel, falling back to CPU only when CUDA cannot be initialized at all."""
+    ensure_cuda_dll_available()
+    add_cuda_dll_directories()
+    device, compute_type = resolve_device_and_compute(requested_device, requested_compute)
+
+    if device == "cuda":
+        try:
+            model = WhisperModel(model_name, device=device, compute_type=compute_type)
+        except Exception as exc:
+            if _looks_like_cuda_runtime_error(exc):
+                print(
+                    "WARNING: CUDA runtime libraries are unavailable. Falling back to CPU.",
+                    file=sys.stderr,
+                )
+                device, compute_type = "cpu", requested_compute if requested_compute is not None else "int8"
+                model = WhisperModel(model_name, device=device, compute_type=compute_type)
+            else:
+                raise
+    else:
+        model = WhisperModel(model_name, device=device, compute_type=compute_type)
+
+    if hasattr(model, "__dict__"):
+        setattr(model, "_runtime_device", device)
+    return model, device, compute_type
+
+
 def collect_input_files(path: Path, recursive: bool) -> list[Path]:
     """Return the media files to transcribe.
 
@@ -146,13 +309,34 @@ def transcribe_one(
     print(f"{counter}Transcribing: {input_path.name}")
     print("This runs locally and may take a while depending on length and model size.\n")
 
-    segments, info = model.transcribe(
-        str(input_path),
-        task=args.task,
-        language=args.language,
-        vad_filter=True,  # skip long silences -> faster, cleaner output
-        beam_size=5,
-    )
+    try:
+        segments, info = model.transcribe(
+            str(input_path),
+            task=args.task,
+            language=args.language,
+            vad_filter=True,  # skip long silences -> faster, cleaner output
+            beam_size=5,
+        )
+    except Exception as exc:
+        if (
+            getattr(model, "_runtime_device", None) == "cuda"
+            and _looks_like_cuda_runtime_error(exc)
+            and getattr(args, "allow_cpu_fallback", False)
+        ):
+            print(
+                f"WARNING: transcription hit a CUDA runtime issue ({exc}). Retrying this file on CPU because --allow-cpu-fallback was requested.",
+                file=sys.stderr,
+            )
+            cpu_model, _, _ = load_whisper_model(args.model, "cpu", "int8")
+            segments, info = cpu_model.transcribe(
+                str(input_path),
+                task=args.task,
+                language=args.language,
+                vad_filter=True,
+                beam_size=5,
+            )
+        else:
+            raise
 
     # Total audio length (seconds) so we can show a percentage as we go.
     duration = getattr(info, "duration", 0) or 0
@@ -244,6 +428,11 @@ def main() -> int:
         action="store_true",
         help="When the input is a folder, also look inside sub-folders.",
     )
+    parser.add_argument(
+        "--allow-cpu-fallback",
+        action="store_true",
+        help="If CUDA hits a runtime issue during a file, retry that file on CPU. Default: off, to keep GPU sequential processing intact.",
+    )
     args = parser.parse_args()
 
     input_path = Path(args.input)
@@ -260,28 +449,14 @@ def main() -> int:
         return 1
 
     device, compute_type = resolve_device_and_compute(args.device, args.compute_type)
-
     print(f"Loading model '{args.model}' on {device.upper()} (compute_type={compute_type})...")
-    try:
-        model = WhisperModel(args.model, device=device, compute_type=compute_type)
-    except Exception as exc:
-        # GPU may be unusable (no CUDA/cuDNN, out of memory, etc.) -> fall back to CPU.
-        if device == "cuda":
-            print(
-                f"WARNING: could not use the GPU ({exc}). Falling back to CPU.",
-                file=sys.stderr,
-            )
-            device, compute_type = "cpu", args.compute_type or "int8"
-            print(
-                f"Loading model '{args.model}' on CPU (compute_type={compute_type})..."
-            )
-            model = WhisperModel(args.model, device=device, compute_type=compute_type)
-        else:
-            raise
+    model, device, compute_type = load_whisper_model(args.model, args.device, args.compute_type)
+    print(f"Using model '{args.model}' on {device.upper()} (compute_type={compute_type})")
 
     total = len(files)
     if total > 1:
         print(f"\nFound {total} media file(s) to transcribe.\n")
+        print("Processing files sequentially, one by one. No parallel batch processing is used.\n")
 
     for index, media_file in enumerate(files, start=1):
         if total > 1:
