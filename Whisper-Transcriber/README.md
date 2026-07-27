@@ -129,6 +129,39 @@ You get two files next to your recording:
 - `meeting.txt` -> plain transcript with timestamps (paste this into Copilot/ChatGPT)
 - `meeting.srt` -> subtitle file you can load in any video player
 
+### Transcribe a whole folder at once
+
+Point it at a **folder** and it will transcribe every video/audio inside it, one by one. The model loads only once, so it is efficient.
+
+```powershell
+python transcribe.py "C:\path\to\recordings_folder"
+
+# Also look inside sub-folders:
+python transcribe.py "C:\path\to\recordings_folder" --recursive
+```
+
+Each file gets its own `.txt` and `.srt` next to it. Supported types include `.mp4`, `.mkv`, `.mov`, `.avi`, `.webm`, `.mp3`, `.wav`, `.m4a` and more.
+
+### Use your GPU for faster processing (optional)
+
+By default the script **auto-detects** an NVIDIA GPU and uses it if available, otherwise it falls back to the CPU. You can also force it:
+
+```powershell
+python transcribe.py "C:\path\to\meeting.mkv" --device cuda   # force GPU
+python transcribe.py "C:\path\to\meeting.mkv" --device cpu    # force CPU
+python transcribe.py "C:\path\to\meeting.mkv" --device auto   # default (auto pick)
+```
+
+On GPU it automatically uses `float16` (fast); on CPU it uses `int8`. If the GPU cannot start (missing CUDA libraries, out of memory, etc.), the script prints a warning and quietly continues on the CPU.
+
+> **One-time GPU setup:** an NVIDIA card alone is not enough - `faster-whisper` also needs the CUDA runtime libraries. If you have an NVIDIA GPU and want to use it, install them once inside your virtual environment:
+>
+> ```powershell
+> pip install nvidia-cublas-cu12 nvidia-cudnn-cu12
+> ```
+>
+> A 6 GB card comfortably runs `tiny`, `base`, `small` and `medium`. If a big model runs out of memory, use a smaller `--model` or add `--compute-type int8_float16`.
+
 ### Faster vs more accurate
 
 The model size decides the speed vs accuracy trade-off:
