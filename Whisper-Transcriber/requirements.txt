@@ -1,0 +1,5 @@
+# Python dependencies for Whisper Transcriber
+# Install with:  pip install -r requirements.txt
+
+# Local, offline speech-to-text engine used by transcribe.py
+faster-whisper>=1.0.0

@@ -1,0 +1,33 @@
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Python cache / build
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+build/
+dist/
+
+# Generated transcription outputs (do not commit personal recordings/transcripts)
+*.txt
+*.srt
+*.mp3
+*.mp4
+*.mkv
+*.wav
+*.m4a
+
+# Keep requirements.txt even though *.txt is ignored above
+!requirements.txt
+
+# IDE / editor
+.vscode/
+.idea/
+
+# OS files
+Thumbs.db
+.DS_Store
