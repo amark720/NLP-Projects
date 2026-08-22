@@ -290,14 +290,28 @@ python transcribe.py "meeting.mkv" --vocab --corrections
 If your meeting is in Hindi or a Hindi + English mix and you want the transcript in **English**:
 
 ```powershell
-python transcribe.py "C:\path\to\meeting.mkv" --task translate --model medium
+python transcribe.py "C:\path\to\meeting.mkv" --task translate
 ```
 
-You can also force a language instead of auto-detecting:
+That is the whole command. Do **not** add `--language en`.
+
+> ⚠️ **The `--language en --task translate` trap.** `--language` is the language **spoken in the audio**, not the language you want out. `--task translate` is what produces English. Asking Whisper to translate English *into* English cancels the translation, and the Hindi parts get forced into English-sounding nonsense instead.
+>
+> Measured on a real recording, same 60 seconds of Hindi:
+>
+> | Command | Output |
+> | --- | --- |
+> | *(no flags)* | `यह समजो यह तीमग तीमा की है, तो आदियो से...` - Hindi script |
+> | `--language en --task translate` | `agar my good luck may be who told me that he's our application automate karna hake jaha pecha ke unko...` - **nonsense** |
+> | `--task translate` | `they are collecting and putting it into the excel, then they are customizing and doing some calculation on top of it...` - **correct** |
+
+When you do not force `--language`, the script re-detects the language on **every window**, so a call that opens in English and switches to Hindi halfway still comes out as readable English. Forcing `--language` turns that off.
+
+Only force a language when the whole recording really is in that one language:
 
 ```powershell
-python transcribe.py "C:\path\to\meeting.mkv" --language en
-python transcribe.py "C:\path\to\meeting.mkv" --language hi
+python transcribe.py "C:\path\to\meeting.mkv" --language hi --task translate   # all-Hindi call
+python transcribe.py "C:\path\to\meeting.mkv" --language en                    # all-English call
 ```
 
 ### Convert video to MP3 first (optional)

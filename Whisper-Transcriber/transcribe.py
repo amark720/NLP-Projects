@@ -30,7 +30,26 @@ Usage:
     python transcribe.py "C:\\path\\to\\video.mkv" --language hi
 
     # HINDI + ENGLISH MIXED audio -> get everything in English text:
-    python transcribe.py "C:\\path\\to\\video.mkv" --task translate --model medium
+    python transcribe.py "C:\\path\\to\\video.mkv" --task translate
+
+Hindi / mixed-language calls - what actually works:
+    --language is the language SPOKEN in the audio, not the language you want out.
+    --task translate is what turns non-English speech into English text.
+
+    Use just  --task translate  and let the language auto-detect. When --language
+    is not forced the script re-detects it on every window, so a call that opens
+    in English and switches to Hindi still comes out as readable English.
+
+    Do NOT combine "--language en --task translate". Whisper cannot translate
+    English into English, so the translation is cancelled and the Hindi parts get
+    forced into English sounds instead. Verified on a real recording:
+
+        --language en --task translate -> "agar my good luck may be who told me
+                                           that he's our application automate
+                                           karna hake jaha pecha ke unko..."
+        --task translate               -> "they are collecting and putting it into
+                                           the excel, then they are customizing
+                                           and doing some calculation on top..."
 
 Using your GPU (much faster):
     By default the script auto-detects an NVIDIA GPU and uses it if available,
@@ -554,6 +573,10 @@ def build_decode_options(args, hotwords: str) -> dict:
         "word_timestamps": True,
         "hallucination_silence_threshold": 2.0,
     }
+    if args.language is None:
+        # Re-detect per window, otherwise a call that opens in English and later
+        # switches to Hindi keeps the English token and comes out as gibberish.
+        options["multilingual"] = True
     if hotwords:
         options["hotwords"] = hotwords
     return options
@@ -677,7 +700,9 @@ def main() -> int:
     parser.add_argument(
         "--language",
         default=None,
-        help="Force a language code (e.g. 'en'). Default: auto-detect.",
+        help="Force the language SPOKEN in the audio (e.g. 'hi'). Default: auto-detect, "
+        "re-checked on every window so mixed Hindi/English calls stay readable. Do not "
+        "combine 'en' with --task translate; that cancels the translation.",
     )
     parser.add_argument(
         "--task",
@@ -745,6 +770,15 @@ def main() -> int:
             file=sys.stderr,
         )
 
+    if args.language == "en" and args.task == "translate":
+        print(
+            "WARNING: '--language en --task translate' cancels the translation - Whisper "
+            "cannot translate English into English, so any Hindi in the call is forced "
+            "into English sounds instead of being translated. Drop '--language en' and "
+            "keep '--task translate'.",
+            file=sys.stderr,
+        )
+
     input_path = Path(args.input)
     if not input_path.exists():
         print(f"ERROR: path not found: {input_path}", file=sys.stderr)
@@ -794,3 +828,4 @@ if __name__ == "__main__":
 #   - [2026-07-27] technical-writer: Register CUDA DLLs shipped by NVIDIA pip wheels (site-packages/nvidia/*/bin) so GPU runs find a complete, matching cuBLAS/cuDNN set on Windows
 #   - [2026-08-22] technical-writer: Accuracy pass for technical vocabulary - domain hotwords (domain_vocab.txt), post-transcription glossary (corrections.txt), anti-hallucination decoding, silence/repeat filtering, and large-v3 as the new default model
 #   - [2026-08-22] technical-writer: Added a work vocabulary profile (Power BI / Azure DevOps / Kusto / scrum), multi-file --vocab and --corrections, token-accurate hotword trimming, and git-ignored *.local.txt files for private names
+#   - [2026-08-22] technical-writer: Per-window language re-detection for mixed Hindi/English calls, plus a warning that '--language en --task translate' cancels the translation
