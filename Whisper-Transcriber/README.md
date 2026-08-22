@@ -53,12 +53,14 @@ Setup helpers are also included:
 | [`setup.ps1`](setup.ps1) | One-command setup for Windows (creates `.venv` and installs everything). |
 | [`setup.sh`](setup.sh) | Same one-command setup for Linux / macOS. |
 
-And two plain-text files that control **transcription accuracy** (see [Getting technical words right](#-getting-technical-words-right)):
+And the plain-text files that control **transcription accuracy** (see [Getting technical words right](#-getting-technical-words-right)):
 
 | File | What it does |
 | --- | --- |
-| [`domain_vocab.txt`](domain_vocab.txt) | Your jargon (LangChain, NL2SQL, Azure AI Search...) fed to the model **while** it listens, so it expects those words. |
+| [`domain_vocab.txt`](domain_vocab.txt) | **Default profile.** GenAI / LLM jargon (LangChain, NL2SQL, Azure AI Search...) fed to the model **while** it listens. |
+| [`vocab_work.txt`](vocab_work.txt) | **Work profile.** Power BI, Azure DevOps, Kusto, IcM and scrum vocabulary for scrum calls and KT sessions. |
 | [`corrections.txt`](corrections.txt) | `wrong => right` rules applied **after** transcription, e.g. `rack approach => RAG approach`. |
+| `*.local.txt` | Optional, **git-ignored**. Your private additions - colleague names, internal project names. Loaded automatically. |
 
 ---
 
@@ -189,33 +191,40 @@ python transcribe.py "C:\path\to\meeting.mkv" --model large-v3
 | `base` | Fast | Ok | |
 | `small` | Balanced | Good | |
 | `medium` | Slower | Better | |
-| `large-v3-turbo` **(default)** | About `medium` speed | Almost `large-v3` | Cannot translate, only transcribe. |
-| `large-v3` | Slowest | Best | Use this with `--task translate`. |
+| `large-v3-turbo` | About `medium` speed | Good, but weaker on rare words | Distilled 4-layer decoder. Cannot translate. |
+| `large-v3` **(default)** | Slowest | **Best** | Use this. Also the only one that handles `--task translate`. |
 
-> `large-v3-turbo` is the sweet spot for technical calls: it is roughly 6-8x faster than `large-v3` but still gets jargon, acronyms and Indian-accented English far more accurately than `small` or `medium`. It only needs about 1.6 GB of GPU memory, so it fits on a 6 GB card easily.
+> **Why `large-v3` and not `large-v3-turbo`?** Turbo is `large-v3` with the decoder distilled from 32 layers down to 4. That decoder is exactly what produces rare words - acronyms, product names, people's names. For technical calls the accuracy loss shows up precisely where you care most, so turbo is only worth it if `large-v3` is too slow on your machine.
 >
-> If a bigger model runs out of GPU memory the script automatically retries with `int8_float16`, which halves the memory need with almost no accuracy loss.
+> On an NVIDIA GPU with 6 GB, `large-v3` runs at a comfortable speed in `float16` (about 4.7 GB). If it ever runs out of memory the script automatically retries with `int8_float16`, which halves the memory need with almost no accuracy loss.
 
 ---
 
 ## 🎯 Getting technical words right
 
-This is the part that matters if your calls are full of **GenAI, Azure, data science or scrum vocabulary**. Out of the box Whisper turns `RAG` into `rack`, `LangChain` into `slam chain`, `NL2SQL` into `annual to SQL` and `Docling` into `doc link`.
+This is the part that matters if your calls are full of **GenAI, Azure, Power BI or scrum vocabulary**. Out of the box Whisper turns `RAG` into `rack`, `LangChain` into `slam chain`, `Power BI` into `Power Via`, `Kusto` into `custo` and `IcM` into `I see him`.
 
 Three things fix that, and all three are already switched on:
 
-### 1. `domain_vocab.txt` - tell the model what to expect
+### 1. Vocabulary files - tell the model what to expect
 
-Every term in this file is fed to the model as a **hotword** on every 30-second window of audio, so it is actively looking out for your jargon while it decodes.
+Every term in these files is fed to the model as a **hotword** on every 30-second window of audio, so it is actively looking out for your jargon while it decodes.
 
-```text
-Azure AI Search
-LangChain
-NL2SQL
-RAG
-```
+Two profiles ship with the tool. **Pick the one that matches the recording** - they cannot both fit in the hotword prompt:
 
-> ⚠️ Whisper only accepts about **220 tokens** of hotwords, which is roughly **800 characters** or **55-60 terms**. The script takes them **in file order** and tells you how many were used and how many were skipped. So put the terms you care about most at the **top** of the file.
+| Profile | Use it for | Command |
+| --- | --- | --- |
+| [`domain_vocab.txt`](domain_vocab.txt) *(default)* | Interviews, GenAI / LLM discussions | `python transcribe.py "call.mkv"` |
+| [`vocab_work.txt`](vocab_work.txt) | Scrum calls, KT sessions, Power BI / ADO / Kusto work | `python transcribe.py "call.mkv" --vocab vocab_work.txt` |
+
+> ⚠️ Whisper only accepts **223 tokens** of hotwords, which works out to roughly **55-60 terms**. The script measures this with the model's own tokenizer and prints exactly how many fit, for example:
+>
+> ```
+> Domain vocabulary: using the first 59 of 102 term(s) from vocab_work.local.txt, vocab_work.txt
+>   (43 term(s) did not fit Whisper's hotword limit...)
+> ```
+>
+> Terms are taken **in file order**, so put the ones you care about most at the **top**. Anything that does not fit still gets handled by the corrections file.
 
 ### 2. `corrections.txt` - fix whatever still slips through
 
@@ -224,13 +233,14 @@ This runs **after** transcription and has no size limit. One rule per line:
 ```text
 rack approach => RAG approach
 slam chain => LangChain
-annual to sql => NL2SQL
-doc link => Docling
+power via => Power BI
+custo cluster => Kusto cluster
+m2tr => MTTR
 ```
 
 Matching is case-insensitive and respects word boundaries, so `rack based` will never match inside `racked`. Longer rules are applied first. Both the `.txt` and the `.srt` get the corrections.
 
-> Only add a phrase here if the wrong form is unlikely to appear as normal English. Single common words (`rack`, `our`, `means`) are too risky on their own - always write them as part of a longer phrase.
+> Only add a phrase here if the wrong form is unlikely to appear as normal English. Single common words (`rack`, `our`, `meter`) are too risky on their own - always write them as part of a longer phrase. The file has a commented-out `RISKY` section at the bottom for exactly these cases.
 
 ### 3. Silence and repetition are dropped automatically
 
@@ -242,21 +252,37 @@ When Whisper is fed silence or crosstalk it starts inventing text - long runs of
 
 Pass `--keep-noise` if you want them back.
 
+### 🔒 Private terms: colleague names and internal project names
+
+Person names and internal project names should **never** be committed to a shared repository. So for any vocabulary or corrections file `X.txt`, the script also loads a sibling **`X.local.txt`** if it exists - and `*.local.txt` is git-ignored.
+
+```
+vocab_work.txt         <- shared: Power BI, Azure DevOps, Kusto, sprint...   (committed)
+vocab_work.local.txt   <- private: colleague names, internal report names    (never committed)
+corrections.txt        <- shared: power via => Power BI                      (committed)
+corrections.local.txt  <- private: sangeera => Sangeeta                      (never committed)
+```
+
+The `.local.txt` file is loaded **first**, so your private terms get priority in the hotword budget. This is what makes scrum call transcripts spell teammate names correctly instead of inventing new ones.
+
 ### Using your own files
 
 ```powershell
-# point at a different vocabulary / glossary
-python transcribe.py "meeting.mkv" --vocab "C:\my\terms.txt" --corrections "C:\my\fixes.txt"
+# a different profile (its .local.txt sibling is picked up automatically)
+python transcribe.py "meeting.mkv" --vocab vocab_work.txt
 
-# turn them off completely
-python transcribe.py "meeting.mkv" --vocab "" --corrections ""
+# combine several files - order decides hotword priority
+python transcribe.py "meeting.mkv" --vocab vocab_work.txt domain_vocab.txt
+
+# turn them off completely (pass the flags with no value)
+python transcribe.py "meeting.mkv" --vocab --corrections
 ```
 
 ### Recommended workflow
 
-1. Transcribe once with the defaults.
-2. Skim the `.txt` and note every technical word that came out wrong.
-3. Add the important ones to the **top** of `domain_vocab.txt`, and add the rest as `wrong => right` lines in `corrections.txt`.
+1. Transcribe once with the right profile.
+2. Skim the `.txt` and note every technical word or name that came out wrong.
+3. Add the important ones to the **top** of the vocabulary file, and add the rest as `wrong => right` lines in the corrections file. Names and internal project names go in the `.local.txt` versions.
 4. Next recording is already better - and the glossary keeps paying off on every future call.
 
 ### Hindi / mixed language meetings
@@ -319,11 +345,11 @@ Record meeting (OBS)  ->  transcribe.py  ->  meeting.txt  ->  paste into M365 Co
 
 ## 📝 Tips
 
-- The default `large-v3-turbo` is already a good balance. Drop to `small` only when you just need a rough idea of what was said.
+- The default `large-v3` is the most accurate option. Drop to `small` only when you just need a rough idea of what was said, or to `large-v3-turbo` if your machine is too slow for `large-v3`.
 - The `.txt` file already has timestamps, so you can jump to that point in the video if needed.
-- If a technical word is misheard, do not just accept it - add it to [`domain_vocab.txt`](domain_vocab.txt) or [`corrections.txt`](corrections.txt) so it is fixed on every future recording too.
-- `translate` mode is great when you only need the meaning in English and not the exact original words. Use it with `--model large-v3`; turbo models cannot translate.
-- Audio quality beats model size. A headset mic, and recording each participant's audio cleanly, helps more than jumping from `medium` to `large-v3`.
+- If a technical word or a name is misheard, do not just accept it - add it to the vocabulary or corrections file so it is fixed on every future recording too.
+- `translate` mode is great when you only need the meaning in English and not the exact original words. It needs `large-v3`; turbo models cannot translate.
+- Audio quality beats model size. A headset mic, and recording each participant's audio cleanly, helps more than any model change.
 
 ---
 

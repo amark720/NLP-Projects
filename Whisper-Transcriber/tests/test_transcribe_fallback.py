@@ -1,6 +1,7 @@
 import sys
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -32,7 +33,7 @@ class TranscribeFallbackTests(unittest.TestCase):
 
 class CorrectionTests(unittest.TestCase):
     def setUp(self):
-        self.rules = transcribe.load_corrections(transcribe.DEFAULT_CORRECTIONS_FILE)
+        self.rules = transcribe.load_corrections([transcribe.DEFAULT_CORRECTIONS_FILE])
 
     def test_shipped_glossary_fixes_common_mishearings(self):
         cases = [
@@ -71,11 +72,47 @@ class NoiseFilterTests(unittest.TestCase):
 
 
 class VocabularyTests(unittest.TestCase):
-    def test_hotwords_stay_within_the_prompt_budget(self):
-        hotwords = transcribe.load_vocabulary(transcribe.DEFAULT_VOCAB_FILE)
-        self.assertTrue(hotwords)
-        self.assertLessEqual(len(hotwords), transcribe.HOTWORD_CHAR_BUDGET)
-        self.assertIn("LangChain", hotwords)
+    def test_default_vocabulary_loads(self):
+        terms = transcribe.load_vocabulary([transcribe.DEFAULT_VOCAB_FILE])
+        self.assertIn("LangChain", terms)
+
+    def test_work_vocabulary_loads(self):
+        terms = transcribe.load_vocabulary([ROOT / "vocab_work.txt"])
+        self.assertIn("Power BI", terms)
+        self.assertIn("Azure DevOps", terms)
+
+    def test_terms_are_deduplicated_across_files(self):
+        terms = transcribe.load_vocabulary(
+            [transcribe.DEFAULT_VOCAB_FILE, transcribe.DEFAULT_VOCAB_FILE]
+        )
+        self.assertEqual(len(terms), len(set(t.lower() for t in terms)))
+
+    def test_hotwords_are_trimmed_to_the_model_budget(self):
+        class FakeTokenizer:
+            @staticmethod
+            def encode(text, add_special_tokens=False):
+                return SimpleNamespace(ids=text.split())
+
+        model = SimpleNamespace(hf_tokenizer=FakeTokenizer(), max_length=12)
+        hotwords = transcribe.build_hotwords(
+            ["alpha", "beta", "gamma", "delta", "epsilon", "zeta", "eta"], model, "test"
+        )
+        self.assertTrue(hotwords.startswith("alpha, beta"))
+        self.assertLessEqual(len(hotwords.split()), 5)
+
+
+class SourceResolutionTests(unittest.TestCase):
+    def test_local_sibling_is_loaded_first(self):
+        files = transcribe.resolve_source_files([str(ROOT / "vocab_work.txt")])
+        names = [f.name for f in files]
+        self.assertIn("vocab_work.txt", names)
+        if "vocab_work.local.txt" in names:
+            self.assertLess(
+                names.index("vocab_work.local.txt"), names.index("vocab_work.txt")
+            )
+
+    def test_missing_files_are_skipped(self):
+        self.assertEqual(transcribe.resolve_source_files([str(ROOT / "nope.txt"), ""]), [])
 
 
 if __name__ == "__main__":

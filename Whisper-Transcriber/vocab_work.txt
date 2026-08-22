@@ -1,0 +1,112 @@
+# Vocabulary profile for WORK calls - Power BI reporting, Azure DevOps,
+# Kusto/IcM and scrum ceremonies. Use it instead of domain_vocab.txt when the
+# recording is a scrum call, a KT session or a client sync:
+#
+#   python transcribe.py "call.mkv" --vocab vocab_work.txt --language en
+#
+# A sibling vocab_work.local.txt (git-ignored) is loaded FIRST if it exists.
+# That is where person names and internal project names belong, so they never
+# get committed to a shared repository.
+#
+# Only the terms that fit Whisper's hotword prompt are used, in file order, so
+# keep the most important ones at the TOP. The script prints how many fit.
+#
+# One term per line. Blank lines and lines starting with # are ignored.
+
+# --- reporting stack -----------------------------------------------------
+Power BI
+Power Query
+DAX
+semantic model
+dataset refresh
+dataflow
+workspace
+gateway
+measure
+calculated column
+slicer
+drill-through
+row-level security
+
+# --- Azure DevOps --------------------------------------------------------
+Azure DevOps
+ADO
+work item
+iteration path
+area path
+cycle time
+lead time
+backlog
+sprint
+epic
+user story
+story points
+burndown
+WIQL
+
+# --- Kusto / telemetry / incidents ---------------------------------------
+Kusto
+KQL
+Azure Data Explorer
+IcM
+incident
+severity
+mitigation
+TSG
+MTTR
+TTR
+SLA
+KPI
+
+# --- Microsoft ecosystem -------------------------------------------------
+SharePoint
+Microsoft Teams
+Power Automate
+Power Apps
+Microsoft Fabric
+Excel
+subscription
+fiscal year
+
+# --- meeting vocabulary --------------------------------------------------
+standup
+retrospective
+backlog refinement
+action item
+blocker
+UAT
+
+# ---------------------------------------------------------------------------
+# Below this point terms will most likely be cut off by the hotword limit.
+# Kept for reference - move anything you need above the cut-off.
+# ---------------------------------------------------------------------------
+capacity
+velocity
+bug density
+deployment frequency
+acceptance criteria
+definition of done
+meter category
+meter subcategory
+service group
+service owner
+service hierarchy
+forecast
+consumption
+billing
+Azure Boards
+Azure Pipelines
+pull request
+work item type
+parent link
+tag
+query view
+pivot table
+Power BI Service
+Power BI Desktop
+paginated report
+incremental refresh
+star schema
+fact table
+dimension table
+M query

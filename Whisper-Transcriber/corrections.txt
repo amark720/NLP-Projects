@@ -1,0 +1,225 @@
+# Post-processing fixes applied to BOTH the .txt and the .srt output.
+#
+# Format:   wrong form => correct form
+# Matching is case-insensitive and respects word boundaries, so "rack based"
+# will not match inside "racked". Longer entries are applied first.
+#
+# Blank lines and lines starting with # are ignored.
+#
+# RULE OF THUMB: only add a phrase here if the wrong form is unlikely to ever
+# appear as normal English. Single common words (rack, our, means, structure)
+# are too risky on their own - always add them as part of a longer phrase.
+
+# --- names ----------------------------------------------------------------
+amal kumar => Amar Kumar
+cab germany => Capgemini
+cap gemini => Capgemini
+lively professional university => Lovely Professional University
+gs labs => GS Lab
+hugging phase => Hugging Face
+hugging faces => Hugging Face
+cgp of => CGPA of
+
+# --- RAG ------------------------------------------------------------------
+rack based => RAG-based
+rack-based => RAG-based
+rack approach => RAG approach
+rack pipeline => RAG pipeline
+rack architecture => RAG architecture
+rack agent => RAG agent
+rack solution => RAG solution
+rack triad => RAG triad
+rag based => RAG-based
+retrieval augmented generation => Retrieval Augmented Generation
+
+# --- LangChain / LangGraph ------------------------------------------------
+slam chain => LangChain
+slam-chain => LangChain
+land chain => LangChain
+lang chain => LangChain
+lanchan => LangChain
+lanchain => LangChain
+lang channel => LangChain
+long chain => LangChain
+land graph => LangGraph
+lang graph => LangGraph
+lung graph => LangGraph
+land channel land graph => LangChain and LangGraph
+lang channel and graph => LangChain and LangGraph
+llama index => LlamaIndex
+lama index => LlamaIndex
+
+# --- NL2SQL ---------------------------------------------------------------
+annual to sql => NL2SQL
+annual two sql => NL2SQL
+l2 sql => NL2SQL
+n l to sql => NL2SQL
+nl to sql => NL2SQL
+natural language to sql => NL2SQL
+text to sql => Text2SQL
+
+# --- Azure products -------------------------------------------------------
+as your document intelligence => Azure Document Intelligence
+azure document intelligence => Azure Document Intelligence
+your document intelligence => Azure Document Intelligence
+form recognizer => Azure Document Intelligence
+azure blog storage => Azure Blob Storage
+azure block storage => Azure Blob Storage
+azure blob storage => Azure Blob Storage
+azure open ai => Azure OpenAI
+azure openai => Azure OpenAI
+azure ai foundry => Azure AI Foundry
+azure ai search => Azure AI Search
+azure a i search => Azure AI Search
+azure data factory => Azure Data Factory
+azure dev ops => Azure DevOps
+application insights => Application Insights
+azure sql => Azure SQL
+key vault => Key Vault
+managed identity => Managed Identity
+semantic kernel => Semantic Kernel
+power bi => Power BI
+row level security => row-level security
+
+# --- GenAI wording --------------------------------------------------------
+gen ai => GenAI
+gen a i => GenAI
+jni => GenAI
+journey i => GenAI
+journey ai => GenAI
+generative ai => Generative AI
+open ai => OpenAI
+chat gpt => ChatGPT
+gpt four o => GPT-4o
+gpt 4 o => GPT-4o
+gpt four point one => GPT-4.1
+gpt 4.1 => GPT-4.1
+guard rails => guardrails
+mini llm => mini LLM
+vector data base => vector database
+doc link => Docling
+dockling => Docling
+document link => Docling
+model context protocol => Model Context Protocol
+m c p => MCP
+
+# --- data / backend -------------------------------------------------------
+restored procedure => stored procedure
+restored procedures => stored procedures
+store procedure => stored procedure
+traditional database => relational database
+the exes => the Excels
+data factory pipeline => Data Factory pipeline
+icm notification => IcM notification
+i c m => IcM
+scikit learn => scikit-learn
+psychic learn => scikit-learn
+x g boost => XGBoost
+xg boost => XGBoost
+smoked => SMOTE
+f1 score => F1 score
+k fold => K-fold
+k means => K-Means
+
+# --- Python / DSA ---------------------------------------------------------
+any ground => anagram
+any gram => anagram
+anna gram => anagram
+list of streams => list of strings
+list of stream => list of strings
+hash map => hashmap
+time and space complexity => time and space complexity
+big o notation => Big O notation
+a dryer => a dry run
+list comprehension => list comprehension
+try accept => try-except
+
+# --- document processing --------------------------------------------------
+table automations => table annotations
+pi mu pdf => PyMuPDF
+pdf plumber => pdfplumber
+py pdf loader => PyPDFLoader
+o c r => OCR
+recursive character text splitter => RecursiveCharacterTextSplitter
+
+# --- scrum / corporate ----------------------------------------------------
+stand up call => standup call
+daily stand up => daily standup
+sprint retro => sprint retrospective
+backlog grooming => backlog grooming
+story point => story point
+azure boards => Azure Boards
+
+# --- Power BI / reporting -------------------------------------------------
+power via => Power BI
+power be i => Power BI
+power buy => Power BI
+power b i => Power BI
+power bi => Power BI
+power bi service => Power BI Service
+power bi desktop => Power BI Desktop
+power query => Power Query
+power automate => Power Automate
+power apps => Power Apps
+microsoft fabric => Microsoft Fabric
+d a x => DAX
+dax measure => DAX measure
+semantic model => semantic model
+data flow => dataflow
+drill through => drill-through
+drill down => drill-down
+share point => SharePoint
+sharepoint => SharePoint
+star schema => star schema
+incremental refresh => incremental refresh
+paginated report => paginated report
+
+# --- Azure DevOps ---------------------------------------------------------
+a d o => ADO
+ado board => ADO board
+azure dev ops => Azure DevOps
+iteration path => iteration path
+area path => area path
+work item => work item
+wiql => WIQL
+wikkle => WIQL
+wiggle query => WIQL query
+cycle time tool => Cycle Time Tool
+burn down => burndown
+burn up => burnup
+u a t => UAT
+
+# --- Kusto / telemetry / incidents ----------------------------------------
+custo => Kusto
+pusto => Kusto
+costo cluster => Kusto cluster
+custom cluster => Kusto cluster
+k q l => KQL
+k u s t o => Kusto
+azure data explorer => Azure Data Explorer
+a d x => ADX
+icm => IcM
+icm ticket => IcM ticket
+icm incident => IcM incident
+m2tr => MTTR
+m t t r => MTTR
+t t r => TTR
+t s g => TSG
+sev one => Sev 1
+sev two => Sev 2
+sev three => Sev 3
+k p i => KPI
+s l a => SLA
+dynamical query => dynamic query
+
+# ---------------------------------------------------------------------------
+# RISKY - uncomment only if you keep seeing these mistakes and you are happy
+# to accept the occasional false positive.
+# ---------------------------------------------------------------------------
+# our sql database => Azure SQL database
+# our sql server => Azure SQL Server
+# the structure will => the destructor will
+# as your => Azure
+# i see him => IcM
+# i see m => IcM
+# meter => MTTR

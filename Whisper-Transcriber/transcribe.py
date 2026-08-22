@@ -9,8 +9,13 @@ Usage:
     # Transcribe EVERY video/audio inside a folder, one by one:
     python transcribe.py "C:\\path\\to\\recordings_folder"
     python transcribe.py "C:\\Users\\amark\\Videos\\Interview Recordings\\More Videos" --model large-v3 --device cuda --language en
-    python transcribe.py "path of video" --model large-v3 --device cuda --language en --task translate
     python transcribe.py "C:\\path\\to\\recordings_folder" --recursive
+
+    # READY-TO-USE - pick the vocabulary profile that matches the recording:
+    # INTERVIEW / GenAI call (RAG, LangChain, NL2SQL, Azure AI Search...):
+    python transcribe.py "path of video" --model large-v3 --device cuda --language en --task translate --vocab domain_vocab.txt
+    # WORK / scrum call (Power BI, Azure DevOps, Kusto, IcM + colleague names):
+    python transcribe.py "path of video" --model large-v3 --device cuda --language en --task translate --vocab vocab_work.txt
 
     # FAST but less accurate (small/tiny model):
     python transcribe.py "C:\\path\\to\\video.mkv" --model tiny
@@ -48,21 +53,34 @@ Model choice (speed vs accuracy):
     base  -> fast
     small -> balanced
     medium-> slower,   more accurate
-    large-v3-turbo -> DEFAULT. Near large-v3 accuracy at roughly medium speed.
-                      Cannot translate, only transcribe.
-    large-v3 -> slowest, best accuracy, and the one to use with --task translate.
+    large-v3-turbo -> roughly medium speed, but its decoder is distilled down to
+                      4 layers, so rare technical words suffer. Cannot translate.
+    large-v3 -> DEFAULT. Slowest, best accuracy, and the one that handles
+                --task translate. Needs about 4.7 GB of GPU memory as float16.
 
-Getting technical words right (GenAI / Azure / data-science / scrum jargon):
-    Two files next to this script drive this, and both are used automatically:
+Getting technical words right (GenAI / Azure / Power BI / scrum jargon):
+    Two kinds of file drive this, and both are picked up automatically:
 
-        domain_vocab.txt  -> terms fed to the model as "hotwords" while it decodes,
-                             so it expects to hear LangChain, NL2SQL, Azure AI Search...
-                             Only the first ~800 characters fit, so order matters.
+        <vocab>.txt       -> terms fed to the model as "hotwords" while it decodes,
+                             so it expects to hear LangChain, NL2SQL, Power BI...
+                             Only ~220 tokens fit, so put important terms FIRST.
         corrections.txt   -> "wrong => right" rules applied to the finished text,
                              e.g. "rack approach => RAG approach". No size limit.
 
-    Edit those files to match your own vocabulary. To turn either off:
-        python transcribe.py "video.mkv" --vocab "" --corrections ""
+    Two vocabulary profiles ship with the tool - pick the one that matches the
+    recording, because they cannot both fit in the hotword prompt:
+
+        domain_vocab.txt  -> GenAI / LLM / interview vocabulary (the default)
+        vocab_work.txt    -> Power BI, Azure DevOps, Kusto, IcM, scrum vocabulary
+
+        python transcribe.py "scrum call.mkv" --vocab vocab_work.txt --language en
+
+    For any file X.txt a sibling X.local.txt is loaded FIRST when it exists.
+    Those .local.txt files are git-ignored, so colleague names and internal
+    project names go there and never end up in a shared repository.
+
+    To turn either off:
+        python transcribe.py "video.mkv" --vocab --corrections
 
     Segments that are only filler ("um um um") or an exact repeat of the previous
     line are dropped, because those are what Whisper invents over silence. Keep
@@ -92,14 +110,11 @@ PROJECT_DIR = Path(__file__).resolve().parent
 DEFAULT_VOCAB_FILE = PROJECT_DIR / "domain_vocab.txt"
 DEFAULT_CORRECTIONS_FILE = PROJECT_DIR / "corrections.txt"
 
-# Best accuracy for plain transcription; turbo models cannot translate, so
-# Hindi/mixed audio that needs English output falls back to the full model.
-DEFAULT_MODEL = "large-v3-turbo"
-DEFAULT_TRANSLATE_MODEL = "large-v3"
+# Most accurate option, and the only large model that can also translate.
+DEFAULT_MODEL = "large-v3"
 
-# Whisper truncates the hotword prompt at ~220 tokens, so only roughly this
-# many characters of domain_vocab.txt ever reach the model.
-HOTWORD_CHAR_BUDGET = 800
+# Fallback only - the real budget is read from the loaded model's tokenizer.
+HOTWORD_CHAR_BUDGET = 700
 
 # Text Whisper invents when it is decoding silence, music or crosstalk.
 JUNK_PHRASES = {
@@ -127,52 +142,88 @@ def format_timestamp(seconds: float, srt: bool = False) -> str:
     return f"{hours:02d}:{minutes:02d}:{secs:02d}"
 
 
-def load_vocabulary(vocab_path: Path) -> str:
-    """Build the comma-separated hotword string that biases Whisper's decoding.
+def resolve_source_files(paths: list[str]) -> list[Path]:
+    """Expand each configured file into the list that is actually read.
 
-    Terms are taken in file order and stopped once the model's prompt budget is
-    reached, so the most important words must be listed first.
+    For "vocab_work.txt" a sibling "vocab_work.local.txt" is read first when it
+    exists. Those .local files are git-ignored, which is where private things
+    like colleague names belong so they never reach a shared repository.
     """
-    if not vocab_path.exists():
+    resolved: list[Path] = []
+    for raw in paths:
+        if not raw:
+            continue
+        path = Path(raw)
+        local = path.with_name(f"{path.stem}.local{path.suffix}")
+        for candidate in (local, path):
+            if candidate.exists() and candidate not in resolved:
+                resolved.append(candidate)
+    return resolved
+
+
+def load_vocabulary(vocab_paths: list[Path]) -> list[str]:
+    """Read the domain terms, in file order, dropping blanks and duplicates."""
+    terms: list[str] = []
+    seen: set[str] = set()
+    for vocab_path in vocab_paths:
+        for raw in vocab_path.read_text(encoding="utf-8").splitlines():
+            term = raw.split("#", 1)[0].strip()
+            if term and term.lower() not in seen:
+                seen.add(term.lower())
+                terms.append(term)
+    return terms
+
+
+def build_hotwords(terms: list[str], model, source_names: str) -> str:
+    """Trim the term list to what actually fits in Whisper's hotword prompt.
+
+    faster-whisper silently truncates anything past half the context window, and
+    proper nouns tokenize badly, so the cut-off is measured with the model's own
+    tokenizer rather than estimated. Terms are kept in order - most important first.
+    """
+    if not terms:
         return ""
 
-    terms: list[str] = []
-    used = 0
-    dropped = 0
-    for raw in vocab_path.read_text(encoding="utf-8").splitlines():
-        term = raw.split("#", 1)[0].strip()
-        if not term:
-            continue
-        if used + len(term) + 2 > HOTWORD_CHAR_BUDGET:
-            dropped += 1
-            continue
-        terms.append(term)
-        used += len(term) + 2
+    tokenizer = getattr(model, "hf_tokenizer", None)
+    token_budget = getattr(model, "max_length", 448) // 2 - 1
 
-    if terms:
-        print(f"Domain vocabulary: using {len(terms)} term(s) from {vocab_path.name}")
-        if dropped:
+    kept: list[str] = []
+    for index, term in enumerate(terms):
+        candidate = kept + [term]
+        if tokenizer is not None:
+            size = len(tokenizer.encode(" " + ", ".join(candidate), add_special_tokens=False).ids)
+            over = size > token_budget
+        else:
+            over = len(", ".join(candidate)) > HOTWORD_CHAR_BUDGET
+        if over:
             print(
-                f"  ({dropped} term(s) skipped - Whisper's hotword limit was reached. "
-                "Move important ones higher up, or put them in corrections.txt.)"
+                f"Domain vocabulary: using the first {len(kept)} of {len(terms)} term(s) "
+                f"from {source_names}"
             )
-    return ", ".join(terms)
+            print(
+                f"  ({len(terms) - index} term(s) did not fit Whisper's hotword limit. "
+                "Move important ones higher up, or put them in the corrections file.)"
+            )
+            break
+        kept = candidate
+    else:
+        print(f"Domain vocabulary: using all {len(kept)} term(s) from {source_names}")
+
+    return ", ".join(kept)
 
 
-def load_corrections(corrections_path: Path) -> list[tuple[re.Pattern, str]]:
+def load_corrections(correction_paths: list[Path]) -> list[tuple[re.Pattern, str]]:
     """Read the 'wrong => right' glossary used to clean up the decoded text."""
-    if not corrections_path.exists():
-        return []
-
     pairs: list[tuple[str, str]] = []
-    for raw in corrections_path.read_text(encoding="utf-8").splitlines():
-        line = raw.strip()
-        if not line or line.startswith("#") or "=>" not in line:
-            continue
-        wrong, right = line.split("=>", 1)
-        wrong, right = wrong.strip(), right.strip()
-        if wrong and right:
-            pairs.append((wrong, right))
+    for corrections_path in correction_paths:
+        for raw in corrections_path.read_text(encoding="utf-8").splitlines():
+            line = raw.strip()
+            if not line or line.startswith("#") or "=>" not in line:
+                continue
+            wrong, right = line.split("=>", 1)
+            wrong, right = wrong.strip(), right.strip()
+            if wrong and right:
+                pairs.append((wrong, right))
 
     # Longest first so "rack based" wins over a shorter overlapping entry.
     pairs.sort(key=lambda pair: len(pair[0]), reverse=True)
@@ -182,7 +233,8 @@ def load_corrections(corrections_path: Path) -> list[tuple[re.Pattern, str]]:
         for wrong, right in pairs
     ]
     if rules:
-        print(f"Glossary: loaded {len(rules)} correction(s) from {corrections_path.name}")
+        names = ", ".join(p.name for p in correction_paths)
+        print(f"Glossary: loaded {len(rules)} correction(s) from {names}")
     return rules
 
 
@@ -620,8 +672,7 @@ def main() -> int:
         "--model",
         default=None,
         help="Whisper model size: tiny, base, small, medium, large-v3, large-v3-turbo "
-        f"(bigger = more accurate but slower). Default: {DEFAULT_MODEL}, or "
-        f"{DEFAULT_TRANSLATE_MODEL} with --task translate because turbo models cannot translate.",
+        f"(bigger = more accurate but slower). Default: {DEFAULT_MODEL}.",
     )
     parser.add_argument(
         "--language",
@@ -661,15 +712,21 @@ def main() -> int:
     )
     parser.add_argument(
         "--vocab",
-        default=str(DEFAULT_VOCAB_FILE),
-        help="File of domain terms (one per line) used to bias the model towards your "
-        f"jargon. Default: {DEFAULT_VOCAB_FILE.name} next to this script. Use '' to disable.",
+        nargs="*",
+        default=[str(DEFAULT_VOCAB_FILE)],
+        help="One or more files of domain terms (one per line) used to bias the model "
+        f"towards your jargon. Default: {DEFAULT_VOCAB_FILE.name} next to this script. "
+        "A matching *.local.txt sibling is picked up automatically. Pass --vocab with "
+        "no value to disable.",
     )
     parser.add_argument(
         "--corrections",
-        default=str(DEFAULT_CORRECTIONS_FILE),
-        help="File of 'wrong => right' rules applied to the finished text. "
-        f"Default: {DEFAULT_CORRECTIONS_FILE.name} next to this script. Use '' to disable.",
+        nargs="*",
+        default=[str(DEFAULT_CORRECTIONS_FILE)],
+        help="One or more files of 'wrong => right' rules applied to the finished text. "
+        f"Default: {DEFAULT_CORRECTIONS_FILE.name} next to this script. A matching "
+        "*.local.txt sibling is picked up automatically. Pass --corrections with no "
+        "value to disable.",
     )
     parser.add_argument(
         "--keep-noise",
@@ -680,11 +737,11 @@ def main() -> int:
     args = parser.parse_args()
 
     if args.model is None:
-        args.model = DEFAULT_TRANSLATE_MODEL if args.task == "translate" else DEFAULT_MODEL
+        args.model = DEFAULT_MODEL
     elif args.task == "translate" and "turbo" in args.model:
         print(
             f"WARNING: '{args.model}' was not trained for translation. "
-            f"Use --model {DEFAULT_TRANSLATE_MODEL} for Hindi/mixed audio.",
+            f"Use --model {DEFAULT_MODEL} for Hindi/mixed audio.",
             file=sys.stderr,
         )
 
@@ -701,13 +758,16 @@ def main() -> int:
         )
         return 1
 
-    hotwords = load_vocabulary(Path(args.vocab)) if args.vocab else ""
-    corrections = load_corrections(Path(args.corrections)) if args.corrections else []
+    vocab_files = resolve_source_files(args.vocab)
+    terms = load_vocabulary(vocab_files)
+    corrections = load_corrections(resolve_source_files(args.corrections))
 
     device, compute_type = resolve_device_and_compute(args.device, args.compute_type)
     print(f"Loading model '{args.model}' on {device.upper()} (compute_type={compute_type})...")
     model, device, compute_type = load_whisper_model(args.model, args.device, args.compute_type)
     print(f"Using model '{args.model}' on {device.upper()} (compute_type={compute_type})")
+
+    hotwords = build_hotwords(terms, model, ", ".join(p.name for p in vocab_files))
 
     total = len(files)
     if total > 1:
@@ -732,4 +792,5 @@ if __name__ == "__main__":
 #   - [2026-07-27] technical-writer: Added optional GPU (--device auto/cpu/cuda) with automatic CPU fallback, and folder input to batch-transcribe all media files (with --recursive)
 #   - [2026-07-27] technical-writer: Added user-friendly progress tracking - per-file X-of-N counter and a live percentage + progress bar based on media duration
 #   - [2026-07-27] technical-writer: Register CUDA DLLs shipped by NVIDIA pip wheels (site-packages/nvidia/*/bin) so GPU runs find a complete, matching cuBLAS/cuDNN set on Windows
-#   - [2026-08-22] technical-writer: Accuracy pass for technical vocabulary - domain hotwords (domain_vocab.txt), post-transcription glossary (corrections.txt), anti-hallucination decoding, silence/repeat filtering, and large-v3-turbo as the new default model
+#   - [2026-08-22] technical-writer: Accuracy pass for technical vocabulary - domain hotwords (domain_vocab.txt), post-transcription glossary (corrections.txt), anti-hallucination decoding, silence/repeat filtering, and large-v3 as the new default model
+#   - [2026-08-22] technical-writer: Added a work vocabulary profile (Power BI / Azure DevOps / Kusto / scrum), multi-file --vocab and --corrections, token-accurate hotword trimming, and git-ignored *.local.txt files for private names

@@ -1,0 +1,150 @@
+# Domain vocabulary ("hotwords") that is fed to Whisper on EVERY 30-second
+# window of audio. This is what biases the model towards your GenAI / Azure /
+# data-science / scrum wording instead of ordinary English words.
+#
+# IMPORTANT - Whisper only accepts about 220 tokens of hotwords, so only the
+# first ~800 characters of this list actually reach the model. Keep the terms
+# you care about MOST at the TOP. Everything that does not fit belongs in
+# corrections.txt, which is applied after transcription instead.
+#
+# One term per line. Blank lines and lines starting with # are ignored.
+
+# --- names that keep getting mangled -------------------------------------
+Amar Kumar
+Persistent Systems
+Lovely Professional University
+
+# --- Azure / cloud products ----------------------------------------------
+Azure OpenAI
+Azure AI Search
+Azure AI Foundry
+Azure Document Intelligence
+Azure Blob Storage
+Azure Data Factory
+Azure SQL
+Application Insights
+Azure DevOps
+
+# --- GenAI core ----------------------------------------------------------
+RAG
+NL2SQL
+LangChain
+LangGraph
+LlamaIndex
+GenAI
+LLM
+SLM
+MCP
+embeddings
+chunking
+vector database
+semantic search
+orchestrator
+intent classification
+guardrails
+hallucination
+prompt engineering
+fine-tuning
+Docling
+Hugging Face
+GPT-4o
+row-level security
+
+# --- data / backend ------------------------------------------------------
+stored procedure
+relational database
+scikit-learn
+XGBoost
+SMOTE
+class imbalance
+precision
+recall
+F1 score
+
+# --- Python / DSA --------------------------------------------------------
+anagram
+hashmap
+dictionary
+time complexity
+destructor
+constructor
+
+# ---------------------------------------------------------------------------
+# Everything BELOW this point will most likely be cut off by the token limit.
+# It is kept here only for reference / for when you re-order the list.
+# ---------------------------------------------------------------------------
+Azure Container Apps
+Azure Machine Learning
+Semantic Kernel
+Key Vault
+Managed Identity
+Kusto
+Power BI
+IcM
+FAISS
+ChromaDB
+Pinecone
+Qdrant
+Weaviate
+pgvector
+text-embedding-3-large
+text-embedding-3-small
+GPT-4.1
+Llama
+Mistral
+Claude
+Gemini
+LoRA
+QLoRA
+PEFT
+RLHF
+transformer
+self-attention
+tokenization
+context window
+temperature
+top-k
+cosine similarity
+re-ranking
+query rewriting
+groundedness
+faithfulness
+RAGAS
+DeepEval
+LangSmith
+Langfuse
+MLflow
+PyMuPDF
+pdfplumber
+Unstructured
+Tesseract
+PaddleOCR
+RecursiveCharacterTextSplitter
+random forest
+gradient boosting
+logistic regression
+naive Bayes
+confusion matrix
+cross-validation
+hyperparameter tuning
+overfitting
+underfitting
+regularization
+oversampling
+undersampling
+feature engineering
+Docker
+Kubernetes
+CI/CD
+microservices
+observability
+telemetry
+sprint
+standup
+retrospective
+backlog grooming
+story points
+velocity
+blocker
+acceptance criteria
+technical debt

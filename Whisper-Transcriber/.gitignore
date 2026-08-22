@@ -21,8 +21,15 @@ dist/
 *.wav
 *.m4a
 
-# Keep requirements.txt even though *.txt is ignored above
+# Keep the files that are part of the tool even though *.txt is ignored above
 !requirements.txt
+!domain_vocab.txt
+!corrections.txt
+!vocab_work.txt
+
+# PRIVATE vocabulary: colleague names and internal project names live in
+# *.local.txt so they are never committed or shared. Keep this rule last.
+*.local.txt
 
 # IDE / editor
 .vscode/
