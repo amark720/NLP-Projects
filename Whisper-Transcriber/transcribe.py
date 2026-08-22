@@ -9,6 +9,7 @@ Usage:
     # Transcribe EVERY video/audio inside a folder, one by one:
     python transcribe.py "C:\\path\\to\\recordings_folder"
     python transcribe.py "C:\\Users\\amark\\Videos\\Interview Recordings\\More Videos" --model large-v3 --device cuda --language en
+    python transcribe.py "path of video" --model large-v3 --device cuda --language en --task translate
     python transcribe.py "C:\\path\\to\\recordings_folder" --recursive
 
     # FAST but less accurate (small/tiny model):
