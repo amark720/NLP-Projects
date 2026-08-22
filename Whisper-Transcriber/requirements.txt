@@ -2,4 +2,5 @@
 # Install with:  pip install -r requirements.txt
 
 # Local, offline speech-to-text engine used by transcribe.py
-faster-whisper>=1.0.0
+# 1.1.0+ is required for the `hotwords` option and the large-v3-turbo model.
+faster-whisper>=1.1.0

@@ -46,9 +46,27 @@ Where are the models stored?
 Model choice (speed vs accuracy):
     tiny  -> fastest,  least accurate
     base  -> fast
-    small -> balanced (default)
-    medium-> slower,   more accurate  (good for Hindi/mixed audio)
-    large-v3 -> slowest, most accurate
+    small -> balanced
+    medium-> slower,   more accurate
+    large-v3-turbo -> DEFAULT. Near large-v3 accuracy at roughly medium speed.
+                      Cannot translate, only transcribe.
+    large-v3 -> slowest, best accuracy, and the one to use with --task translate.
+
+Getting technical words right (GenAI / Azure / data-science / scrum jargon):
+    Two files next to this script drive this, and both are used automatically:
+
+        domain_vocab.txt  -> terms fed to the model as "hotwords" while it decodes,
+                             so it expects to hear LangChain, NL2SQL, Azure AI Search...
+                             Only the first ~800 characters fit, so order matters.
+        corrections.txt   -> "wrong => right" rules applied to the finished text,
+                             e.g. "rack approach => RAG approach". No size limit.
+
+    Edit those files to match your own vocabulary. To turn either off:
+        python transcribe.py "video.mkv" --vocab "" --corrections ""
+
+    Segments that are only filler ("um um um") or an exact repeat of the previous
+    line are dropped, because those are what Whisper invents over silence. Keep
+    them with --keep-noise.
 
 Outputs (next to each input file):
     <name>.txt   -> plain transcript with timestamps
@@ -57,6 +75,7 @@ Outputs (next to each input file):
 
 import argparse
 import os
+import re
 import shutil
 import sys
 from pathlib import Path
@@ -69,6 +88,33 @@ MEDIA_EXTENSIONS = {
     ".mp3", ".wav", ".m4a", ".aac", ".flac", ".ogg", ".opus", ".wma",
 }
 
+PROJECT_DIR = Path(__file__).resolve().parent
+DEFAULT_VOCAB_FILE = PROJECT_DIR / "domain_vocab.txt"
+DEFAULT_CORRECTIONS_FILE = PROJECT_DIR / "corrections.txt"
+
+# Best accuracy for plain transcription; turbo models cannot translate, so
+# Hindi/mixed audio that needs English output falls back to the full model.
+DEFAULT_MODEL = "large-v3-turbo"
+DEFAULT_TRANSLATE_MODEL = "large-v3"
+
+# Whisper truncates the hotword prompt at ~220 tokens, so only roughly this
+# many characters of domain_vocab.txt ever reach the model.
+HOTWORD_CHAR_BUDGET = 800
+
+# Text Whisper invents when it is decoding silence, music or crosstalk.
+JUNK_PHRASES = {
+    "thanks for watching",
+    "thank you for watching",
+    "subscribe to my channel",
+    "please subscribe",
+    "like and subscribe",
+    "subtitles by the amara.org community",
+    "amara.org",
+    "transcription by castingwords",
+    "www.mooji.org",
+}
+FILLER_ONLY = re.compile(r"^(?:(?:um|uh|hmm+|mm+|mhm|ah|eh|hm)\b[\s,.!?\-]*)+$", re.IGNORECASE)
+
 
 def format_timestamp(seconds: float, srt: bool = False) -> str:
     """Convert seconds to HH:MM:SS,mmm (SRT) or HH:MM:SS (txt)."""
@@ -79,6 +125,83 @@ def format_timestamp(seconds: float, srt: bool = False) -> str:
     if srt:
         return f"{hours:02d}:{minutes:02d}:{secs:02d},{millis:03d}"
     return f"{hours:02d}:{minutes:02d}:{secs:02d}"
+
+
+def load_vocabulary(vocab_path: Path) -> str:
+    """Build the comma-separated hotword string that biases Whisper's decoding.
+
+    Terms are taken in file order and stopped once the model's prompt budget is
+    reached, so the most important words must be listed first.
+    """
+    if not vocab_path.exists():
+        return ""
+
+    terms: list[str] = []
+    used = 0
+    dropped = 0
+    for raw in vocab_path.read_text(encoding="utf-8").splitlines():
+        term = raw.split("#", 1)[0].strip()
+        if not term:
+            continue
+        if used + len(term) + 2 > HOTWORD_CHAR_BUDGET:
+            dropped += 1
+            continue
+        terms.append(term)
+        used += len(term) + 2
+
+    if terms:
+        print(f"Domain vocabulary: using {len(terms)} term(s) from {vocab_path.name}")
+        if dropped:
+            print(
+                f"  ({dropped} term(s) skipped - Whisper's hotword limit was reached. "
+                "Move important ones higher up, or put them in corrections.txt.)"
+            )
+    return ", ".join(terms)
+
+
+def load_corrections(corrections_path: Path) -> list[tuple[re.Pattern, str]]:
+    """Read the 'wrong => right' glossary used to clean up the decoded text."""
+    if not corrections_path.exists():
+        return []
+
+    pairs: list[tuple[str, str]] = []
+    for raw in corrections_path.read_text(encoding="utf-8").splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#") or "=>" not in line:
+            continue
+        wrong, right = line.split("=>", 1)
+        wrong, right = wrong.strip(), right.strip()
+        if wrong and right:
+            pairs.append((wrong, right))
+
+    # Longest first so "rack based" wins over a shorter overlapping entry.
+    pairs.sort(key=lambda pair: len(pair[0]), reverse=True)
+
+    rules = [
+        (re.compile(rf"(?<!\w){re.escape(wrong)}(?!\w)", re.IGNORECASE), right)
+        for wrong, right in pairs
+    ]
+    if rules:
+        print(f"Glossary: loaded {len(rules)} correction(s) from {corrections_path.name}")
+    return rules
+
+
+def apply_corrections(text: str, rules: list[tuple[re.Pattern, str]]) -> str:
+    """Replace misheard technical terms with their canonical spelling."""
+    for pattern, replacement in rules:
+        text = pattern.sub(replacement.replace("\\", r"\\"), text)
+    return text
+
+
+def is_noise_segment(text: str, no_speech_prob: float) -> bool:
+    """Detect the filler and boilerplate Whisper produces on near-silent audio."""
+    stripped = text.strip()
+    if not stripped:
+        return True
+    if FILLER_ONLY.match(stripped):
+        return True
+    normalised = re.sub(r"[^a-z0-9.\s]", "", stripped.lower()).strip()
+    return normalised in JUNK_PHRASES and no_speech_prob > 0.4
 
 
 def cuda_is_available() -> bool:
@@ -307,7 +430,15 @@ def load_whisper_model(model_name: str, requested_device: str, requested_compute
         try:
             model = WhisperModel(model_name, device=device, compute_type=compute_type)
         except Exception as exc:
-            if _looks_like_cuda_runtime_error(exc):
+            if "out of memory" in str(exc).lower() and compute_type != "int8_float16":
+                print(
+                    f"WARNING: '{model_name}' did not fit in GPU memory as {compute_type}. "
+                    "Retrying as int8_float16.",
+                    file=sys.stderr,
+                )
+                compute_type = "int8_float16"
+                model = WhisperModel(model_name, device=device, compute_type=compute_type)
+            elif _looks_like_cuda_runtime_error(exc):
                 print(
                     "WARNING: CUDA runtime libraries are unavailable. Falling back to CPU.",
                     file=sys.stderr,
@@ -350,14 +481,47 @@ def progress_bar(pct: float, width: int = 20) -> str:
     return "|" + "#" * filled + "-" * (width - filled) + "|"
 
 
+def build_decode_options(args, hotwords: str) -> dict:
+    """Decoding settings tuned for long technical calls.
+
+    condition_on_previous_text is off because a single bad guess otherwise
+    snowballs into the repeated-sentence loops Whisper is famous for, and the
+    hotwords are re-applied to every window instead of only the first one.
+    """
+    options = {
+        "task": args.task,
+        "language": args.language,
+        "beam_size": 5,
+        "vad_filter": True,  # skip long silences -> faster, cleaner output
+        "vad_parameters": {"min_silence_duration_ms": 500, "speech_pad_ms": 200},
+        "condition_on_previous_text": False,
+        "temperature": [0.0, 0.2, 0.4, 0.6, 0.8, 1.0],
+        "compression_ratio_threshold": 2.4,
+        "log_prob_threshold": -1.0,
+        "no_speech_threshold": 0.6,
+        "word_timestamps": True,
+        "hallucination_silence_threshold": 2.0,
+    }
+    if hotwords:
+        options["hotwords"] = hotwords
+    return options
+
+
 def transcribe_one(
-    model: WhisperModel, input_path: Path, args, index: int, total: int
+    model: WhisperModel,
+    input_path: Path,
+    args,
+    index: int,
+    total: int,
+    hotwords: str = "",
+    corrections: list[tuple[re.Pattern, str]] | None = None,
 ) -> None:
     """Transcribe a single file and write its .txt and .srt next to it.
 
     Prints a live per-file progress percentage (based on how far into the
     media's total duration we are) plus, in folder mode, an X-of-N counter.
     """
+    corrections = corrections or []
     txt_path = input_path.with_suffix(".txt")
     srt_path = input_path.with_suffix(".srt")
 
@@ -365,14 +529,10 @@ def transcribe_one(
     print(f"{counter}Transcribing: {input_path.name}")
     print("This runs locally and may take a while depending on length and model size.\n")
 
+    decode_options = build_decode_options(args, hotwords)
+
     try:
-        segments, info = model.transcribe(
-            str(input_path),
-            task=args.task,
-            language=args.language,
-            vad_filter=True,  # skip long silences -> faster, cleaner output
-            beam_size=5,
-        )
+        segments, info = model.transcribe(str(input_path), **decode_options)
     except Exception as exc:
         if (
             getattr(model, "_runtime_device", None) == "cuda"
@@ -384,13 +544,7 @@ def transcribe_one(
                 file=sys.stderr,
             )
             cpu_model, _, _ = load_whisper_model(args.model, "cpu", "int8")
-            segments, info = cpu_model.transcribe(
-                str(input_path),
-                task=args.task,
-                language=args.language,
-                vad_filter=True,
-                beam_size=5,
-            )
+            segments, info = cpu_model.transcribe(str(input_path), **decode_options)
         else:
             raise
 
@@ -406,9 +560,21 @@ def transcribe_one(
 
     txt_lines = []
     srt_lines = []
+    kept = 0
+    skipped = 0
+    previous_text = None
 
-    for i, segment in enumerate(segments, start=1):
-        text = segment.text.strip()
+    for segment in segments:
+        text = apply_corrections(segment.text.strip(), corrections)
+
+        if not args.keep_noise and (
+            is_noise_segment(text, segment.no_speech_prob)
+            or text.lower() == (previous_text or "").lower()
+        ):
+            skipped += 1
+            continue
+        previous_text = text
+        kept += 1
 
         # How far into the file we are, as a percentage of total duration.
         pct = (segment.end / duration * 100.0) if duration else 0.0
@@ -423,7 +589,7 @@ def transcribe_one(
 
         txt_lines.append(f"[{start_disp} - {end_disp}] {text}")
 
-        srt_lines.append(str(i))
+        srt_lines.append(str(kept))
         srt_lines.append(
             f"{format_timestamp(segment.start, srt=True)} --> "
             f"{format_timestamp(segment.end, srt=True)}"
@@ -433,6 +599,9 @@ def transcribe_one(
 
     txt_path.write_text("\n".join(txt_lines) + "\n", encoding="utf-8")
     srt_path.write_text("\n".join(srt_lines) + "\n", encoding="utf-8")
+
+    if skipped:
+        print(f"\nFiltered out {skipped} silent/repeated segment(s).")
 
     if duration:
         print(f"{progress_bar(100)} 100.0% - finished {input_path.name}")
@@ -449,9 +618,10 @@ def main() -> int:
     )
     parser.add_argument(
         "--model",
-        default="small",
-        help="Whisper model size: tiny, base, small, medium, large-v3 "
-        "(bigger = more accurate but slower). Default: small.",
+        default=None,
+        help="Whisper model size: tiny, base, small, medium, large-v3, large-v3-turbo "
+        f"(bigger = more accurate but slower). Default: {DEFAULT_MODEL}, or "
+        f"{DEFAULT_TRANSLATE_MODEL} with --task translate because turbo models cannot translate.",
     )
     parser.add_argument(
         "--language",
@@ -489,7 +659,34 @@ def main() -> int:
         action="store_true",
         help="If CUDA hits a runtime issue during a file, retry that file on CPU. Default: off, to keep GPU sequential processing intact.",
     )
+    parser.add_argument(
+        "--vocab",
+        default=str(DEFAULT_VOCAB_FILE),
+        help="File of domain terms (one per line) used to bias the model towards your "
+        f"jargon. Default: {DEFAULT_VOCAB_FILE.name} next to this script. Use '' to disable.",
+    )
+    parser.add_argument(
+        "--corrections",
+        default=str(DEFAULT_CORRECTIONS_FILE),
+        help="File of 'wrong => right' rules applied to the finished text. "
+        f"Default: {DEFAULT_CORRECTIONS_FILE.name} next to this script. Use '' to disable.",
+    )
+    parser.add_argument(
+        "--keep-noise",
+        action="store_true",
+        help="Keep filler-only ('um um um') and repeated segments that the model invents "
+        "over silence. Default: off, they are dropped.",
+    )
     args = parser.parse_args()
+
+    if args.model is None:
+        args.model = DEFAULT_TRANSLATE_MODEL if args.task == "translate" else DEFAULT_MODEL
+    elif args.task == "translate" and "turbo" in args.model:
+        print(
+            f"WARNING: '{args.model}' was not trained for translation. "
+            f"Use --model {DEFAULT_TRANSLATE_MODEL} for Hindi/mixed audio.",
+            file=sys.stderr,
+        )
 
     input_path = Path(args.input)
     if not input_path.exists():
@@ -504,6 +701,9 @@ def main() -> int:
         )
         return 1
 
+    hotwords = load_vocabulary(Path(args.vocab)) if args.vocab else ""
+    corrections = load_corrections(Path(args.corrections)) if args.corrections else []
+
     device, compute_type = resolve_device_and_compute(args.device, args.compute_type)
     print(f"Loading model '{args.model}' on {device.upper()} (compute_type={compute_type})...")
     model, device, compute_type = load_whisper_model(args.model, args.device, args.compute_type)
@@ -517,7 +717,7 @@ def main() -> int:
     for index, media_file in enumerate(files, start=1):
         if total > 1:
             print(f"===== [{index}/{total}] {media_file.name} =====")
-        transcribe_one(model, media_file, args, index, total)
+        transcribe_one(model, media_file, args, index, total, hotwords, corrections)
 
     if total > 1:
         print(f"All done. Transcribed {total} file(s).")
@@ -532,3 +732,4 @@ if __name__ == "__main__":
 #   - [2026-07-27] technical-writer: Added optional GPU (--device auto/cpu/cuda) with automatic CPU fallback, and folder input to batch-transcribe all media files (with --recursive)
 #   - [2026-07-27] technical-writer: Added user-friendly progress tracking - per-file X-of-N counter and a live percentage + progress bar based on media duration
 #   - [2026-07-27] technical-writer: Register CUDA DLLs shipped by NVIDIA pip wheels (site-packages/nvidia/*/bin) so GPU runs find a complete, matching cuBLAS/cuDNN set on Windows
+#   - [2026-08-22] technical-writer: Accuracy pass for technical vocabulary - domain hotwords (domain_vocab.txt), post-transcription glossary (corrections.txt), anti-hallucination decoding, silence/repeat filtering, and large-v3-turbo as the new default model

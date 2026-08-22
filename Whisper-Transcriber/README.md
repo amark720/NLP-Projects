@@ -53,6 +53,13 @@ Setup helpers are also included:
 | [`setup.ps1`](setup.ps1) | One-command setup for Windows (creates `.venv` and installs everything). |
 | [`setup.sh`](setup.sh) | Same one-command setup for Linux / macOS. |
 
+And two plain-text files that control **transcription accuracy** (see [Getting technical words right](#-getting-technical-words-right)):
+
+| File | What it does |
+| --- | --- |
+| [`domain_vocab.txt`](domain_vocab.txt) | Your jargon (LangChain, NL2SQL, Azure AI Search...) fed to the model **while** it listens, so it expects those words. |
+| [`corrections.txt`](corrections.txt) | `wrong => right` rules applied **after** transcription, e.g. `rack approach => RAG approach`. |
+
 ---
 
 ## 🛠️ Setup
@@ -176,13 +183,81 @@ python transcribe.py "C:\path\to\meeting.mkv" --model medium
 python transcribe.py "C:\path\to\meeting.mkv" --model large-v3
 ```
 
-| Model | Speed | Accuracy |
-| --- | --- | --- |
-| `tiny` | Fastest | Lowest |
-| `base` | Fast | Ok |
-| `small` (default) | Balanced | Good |
-| `medium` | Slower | Better (good for Hindi/mixed audio) |
-| `large-v3` | Slowest | Best |
+| Model | Speed | Accuracy | Notes |
+| --- | --- | --- | --- |
+| `tiny` | Fastest | Lowest | |
+| `base` | Fast | Ok | |
+| `small` | Balanced | Good | |
+| `medium` | Slower | Better | |
+| `large-v3-turbo` **(default)** | About `medium` speed | Almost `large-v3` | Cannot translate, only transcribe. |
+| `large-v3` | Slowest | Best | Use this with `--task translate`. |
+
+> `large-v3-turbo` is the sweet spot for technical calls: it is roughly 6-8x faster than `large-v3` but still gets jargon, acronyms and Indian-accented English far more accurately than `small` or `medium`. It only needs about 1.6 GB of GPU memory, so it fits on a 6 GB card easily.
+>
+> If a bigger model runs out of GPU memory the script automatically retries with `int8_float16`, which halves the memory need with almost no accuracy loss.
+
+---
+
+## 🎯 Getting technical words right
+
+This is the part that matters if your calls are full of **GenAI, Azure, data science or scrum vocabulary**. Out of the box Whisper turns `RAG` into `rack`, `LangChain` into `slam chain`, `NL2SQL` into `annual to SQL` and `Docling` into `doc link`.
+
+Three things fix that, and all three are already switched on:
+
+### 1. `domain_vocab.txt` - tell the model what to expect
+
+Every term in this file is fed to the model as a **hotword** on every 30-second window of audio, so it is actively looking out for your jargon while it decodes.
+
+```text
+Azure AI Search
+LangChain
+NL2SQL
+RAG
+```
+
+> ⚠️ Whisper only accepts about **220 tokens** of hotwords, which is roughly **800 characters** or **55-60 terms**. The script takes them **in file order** and tells you how many were used and how many were skipped. So put the terms you care about most at the **top** of the file.
+
+### 2. `corrections.txt` - fix whatever still slips through
+
+This runs **after** transcription and has no size limit. One rule per line:
+
+```text
+rack approach => RAG approach
+slam chain => LangChain
+annual to sql => NL2SQL
+doc link => Docling
+```
+
+Matching is case-insensitive and respects word boundaries, so `rack based` will never match inside `racked`. Longer rules are applied first. Both the `.txt` and the `.srt` get the corrections.
+
+> Only add a phrase here if the wrong form is unlikely to appear as normal English. Single common words (`rack`, `our`, `means`) are too risky on their own - always write them as part of a longer phrase.
+
+### 3. Silence and repetition are dropped automatically
+
+When Whisper is fed silence or crosstalk it starts inventing text - long runs of `um um um`, the same sentence repeated three times, or random unrelated sentences. The script now:
+
+- turns off `condition_on_previous_text`, which is what causes those repeat loops in the first place,
+- uses a temperature fallback plus compression-ratio and log-probability checks to reject low-confidence guesses,
+- drops filler-only segments and exact repeats of the previous line.
+
+Pass `--keep-noise` if you want them back.
+
+### Using your own files
+
+```powershell
+# point at a different vocabulary / glossary
+python transcribe.py "meeting.mkv" --vocab "C:\my\terms.txt" --corrections "C:\my\fixes.txt"
+
+# turn them off completely
+python transcribe.py "meeting.mkv" --vocab "" --corrections ""
+```
+
+### Recommended workflow
+
+1. Transcribe once with the defaults.
+2. Skim the `.txt` and note every technical word that came out wrong.
+3. Add the important ones to the **top** of `domain_vocab.txt`, and add the rest as `wrong => right` lines in `corrections.txt`.
+4. Next recording is already better - and the glossary keeps paying off on every future call.
 
 ### Hindi / mixed language meetings
 
@@ -244,10 +319,11 @@ Record meeting (OBS)  ->  transcribe.py  ->  meeting.txt  ->  paste into M365 Co
 
 ## 📝 Tips
 
-- For long meetings, `small` or `medium` gives a good balance of speed and quality.
+- The default `large-v3-turbo` is already a good balance. Drop to `small` only when you just need a rough idea of what was said.
 - The `.txt` file already has timestamps, so you can jump to that point in the video if needed.
-- If a word is misheard, a bigger model usually fixes it.
-- `translate` mode is great when you only need the meaning in English and not the exact original words.
+- If a technical word is misheard, do not just accept it - add it to [`domain_vocab.txt`](domain_vocab.txt) or [`corrections.txt`](corrections.txt) so it is fixed on every future recording too.
+- `translate` mode is great when you only need the meaning in English and not the exact original words. Use it with `--model large-v3`; turbo models cannot translate.
+- Audio quality beats model size. A headset mic, and recording each participant's audio cleanly, helps more than jumping from `medium` to `large-v3`.
 
 ---
 
